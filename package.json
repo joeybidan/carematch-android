@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync:server": "node scripts/sync-server-engine.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

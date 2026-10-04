@@ -3,3 +3,9 @@ dist/
 .vscode/
 .DS_Store
 *.log
+.idea/
+android/.idea/
+artifacts/
+.env
+.env.*
+supabase/.temp/

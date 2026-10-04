@@ -6,7 +6,7 @@ Standalone CareMatch project extracted from DocuTool without removing or changin
 
 CareMatch runs by itself using Vite + React, wrapped as an Android app with Capacitor. Its application ID is `com.joeybidan.carematch`.
 
-The gameplay rules are copied from the existing DocuTool CareMatch engine. For this first standalone build, the Top 5 is stored locally on the current browser/device. The shared online leaderboard will be connected in a later phase before Android release.
+The gameplay rules are copied from the existing DocuTool CareMatch engine. Version 1.1 adds shared weekly and all-time Top 5 rankings, while keeping an on-device scoreboard and offline gameplay. The icon and Joey Bidan Studios intro passed the user's physical-phone test.
 
 ## Run locally
 
@@ -28,9 +28,10 @@ That page should contain CareMatch only.
 In GitHub Desktop, select **carematch-android** and click **Fetch origin**, then **Pull origin** if offered. Open PowerShell in the repository root (the folder containing `package.json`, not the `android` subfolder), then run:
 
 ```powershell
-npm ci
-npm run build
-npx cap sync android
+npm.cmd ci
+npm.cmd test
+npm.cmd run build
+npx.cmd cap sync android
 ```
 
 Open the existing `android` project in Android Studio, allow Gradle sync to finish, select your emulator/device and click Run. A GitHub update alone does not update the APK installed on your phone.
@@ -81,10 +82,38 @@ The icon was created with the built-in image generator using this prompt: "Andro
 
 ## Independence and leaderboard
 
-This repository has its own source and Android project. No DocuTool build or deployment steps are needed. The leaderboard currently uses local storage and has no Supabase connection. Sharing a Supabase account does not couple app code; any future shared database tables or policies would need coordinated changes.
+This repository has its own source and Android project. It uses dedicated `carematch_rounds` and `carematch_scores` tables plus the `carematch-api` Edge Function in Supabase project `blefujvmurpkgmiazbiq`. No DocuTool build, web deployment, Auth configuration changes, or edits to DocuTool's existing tables are needed. The two apps share that project's availability and resource limits.
+
+### Global leaderboard behavior
+
+- Start a round while connected to obtain a server-issued seed and a private round ticket. The app labels the round as eligible for global rankings. No email, password, or account creation is shown.
+- Complete the round and tap **Save Score**. A local copy is saved first. The server replays the recorded moves using the identical game engine and computes the score itself; unfinished, invalid, or altered submissions are rejected. Repeated submissions of the same round cannot create duplicate records.
+- **This week** and **All time** show the five highest best scores per alias. Ties go to the score accepted first. Aliases are uppercased and aren't reserved identities: two people choosing the same alias share that leaderboard entry. Choose a distinctive name of up to 12 characters.
+- Weeks run Monday 12:00 AM to the following Monday in `Asia/Manila`, based on when the server accepts a score. The weekly board rolls over without deleting the all-time history.
+- **On device** retains the existing local scoreboard. Clearing it doesn't affect global scores.
+- A round started offline remains local-only, even if connectivity returns later. A round started online can queue its completed submission if the connection drops. Up to five pending submissions are stored on this device, valid for 24 hours from the round's start. Reopening the app, reconnecting, or tapping **Refresh / Retry sync** retries them. Expired or invalid tickets remain local only.
+- Global scores refresh at startup, when returning to the app, after saving, or on demand. There is no background polling or Realtime subscription. Last downloaded rankings are labelled as cached when disconnected; an expired week's cached scores are cleared on startup.
+- Old local scores cannot be uploaded: those rounds have no server-issued ticket or recorded move history.
+
+### Backend maintenance
+
+The live backend is already configured. Pulling this repository and rebuilding the APK requires no keys or SQL pasted into Android Studio. `src/carematch/online-config.json` contains only the public endpoint and publishable key. Server secrets remain in Supabase's Edge Function environment.
+
+The SQL snapshot is in `supabase/migrations/`. It was applied directly through the Supabase SQL connection, independently of the shared project's migration history. It creates only CareMatch resources; do not blindly run `supabase db push` against this shared project or reapply this bootstrap to existing tables. The Edge Function source is in `supabase/functions/carematch-api/`.
+
+Both tables have RLS enabled and no client access. Only the server can call the four CareMatch database functions, all of which use `SECURITY INVOKER`. The API checks the publishable key itself because publishable keys aren't JWTs (`verify_jwt = false` is intentional). Client-provided scores and seeds are never trusted. New rounds are limited to 10 per minute and 200 per day per hashed network address; this is a basic abuse limit, not proof of a human player. A valid move history can still be generated by a bot. No raw IP addresses are stored in CareMatch tables; keyed hashes are cleared after 24 hours when subsequent rounds start, and expired rounds without scores are removed.
+
+After changing game rules, run `npm.cmd run sync:server`, run the tests, and redeploy the Edge Function before distributing a matching APK. Bump `RULES_VERSION` and coordinate the score-table constraint for any incompatible rules change. Don't change the server rules while existing 24-hour tickets are in use without a compatibility plan.
+
+### Verification and physical-phone update
+
+Automated tests cover server replay, forged/unfinished/invalid score rejection, ticket ownership, idempotent retries, shared engine parity, offline queue retries, and expired/rejected tickets. Live tests also verify Supabase grants, per-alias ranking, Philippine week boundaries, rate limiting, and matching independent leaderboard reads. Temporary QA scores are removed after testing.
+
+Rendered QA uses the existing Playwright runtime (Browser plugin unavailable), at `http://127.0.0.1:5173/` with 393×852 and 1280×800 viewports. It verifies page identity, populated screens, no framework overlay or application errors, tab switching, a completed online game and save, offline game/local save, cached ranking messages, and no horizontal overflow. Browser API traffic is forwarded through Node to the live backend because the sandbox browser cannot reach Supabase directly; only the QA browser's request timers are extended to accommodate the relay's latency. Production timeouts remain 4 seconds for a round ticket and 8 seconds for rankings/submission. This does not replace the physical-phone network test. Expected network errors during intentional disconnects are excluded from application-error checks.
+
+Rebuild using the Windows commands above, then copy the new `android/app/build/outputs/apk/debug/app-debug.apk` to your phone and install it over the existing app using the same PC/signing key. Don't uninstall if you want to retain your local scores. Start a new online round, save its completed score, and check it on another device running the updated build. Online functionality on a physical phone must be verified after this update; the earlier APK still has only local scores.
 
 ## Remaining phases
 
-1. Repeat launcher icon and startup verification on a physical Android device (Pixel 8 emulator verified).
-2. Connect a shared online leaderboard.
-3. Build and test a signed APK/AAB.
+1. Rebuild the version 1.1 APK and verify shared rankings on two physical devices.
+2. Build and test a signed release APK/AAB.

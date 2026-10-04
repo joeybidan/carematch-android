@@ -1,0 +1,5 @@
+project_id = "carematch-android"
+
+[functions.carematch-api]
+# The handler authenticates the apikey header itself; publishable keys are not JWTs.
+verify_jwt = false
