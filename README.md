@@ -35,6 +35,31 @@ npx cap sync android
 
 Open the existing `android` project in Android Studio, allow Gradle sync to finish, select your emulator/device and click Run. A GitHub update alone does not update the APK installed on your phone.
 
+### Verified Windows command-line build
+
+Use the `.cmd` launchers if PowerShell blocks `npm.ps1`. From the repository root:
+
+```powershell
+npm.cmd run build
+npx.cmd cap sync android
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+Push-Location android
+.\gradlew.bat assembleDebug --console=plain
+Pop-Location
+$adbPath = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+& $adbPath devices -l
+& $adbPath -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk
+& $adbPath -s emulator-5554 shell am start -n com.joeybidan.carematch/.MainActivity
+```
+
+Replace `emulator-5554` if `adb devices` reports a different serial. The APK is at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+On October 5, 2026, the web build, Capacitor sync, and two Android debug builds passed. The APK was installed on the running `Pixel_8` emulator. The puzzle-heart launcher icon, Joey Bidan Studios intro, and transition into the game were visually verified. Captures and app startup logs are in `artifacts/android-qa/`. No CareMatch crash or JavaScript exception was observed; WebView/graphics warnings and unrelated emulator UWB service crashes appeared in system logs.
+
+The previously reported failure deleting `android/app/build/intermediates` did not recur, so no build folders were deleted or Gradle configuration changed. If it recurs, stop any active Android Studio build, run `.\gradlew.bat --stop` from `android`, pause OneDrive syncing, and retry. A permanent option is a fresh checkout outside OneDrive; reinstall dependencies and sync Capacitor there before building.
+
+No Android Studio clicks are required for this installed build. To run future builds in Studio, open this repository's `android` folder, wait for sync, select the `app` run configuration and `Pixel 8`, then click the green Run triangle.
+
 ## App icon and studio intro
 
 - The launcher uses the teal CareMatch puzzle-heart, with adaptive icons and Android 13+ themed-icon support.
@@ -60,6 +85,6 @@ This repository has its own source and Android project. No DocuTool build or dep
 
 ## Remaining phases
 
-1. Verify the new launcher icon and startup sequence on Android emulator/device.
+1. Repeat launcher icon and startup verification on a physical Android device (Pixel 8 emulator verified).
 2. Connect a shared online leaderboard.
 3. Build and test a signed APK/AAB.
