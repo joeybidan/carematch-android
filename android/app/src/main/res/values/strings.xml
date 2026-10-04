@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CareMatch</string>
+    <string name="title_activity_main">CareMatch</string>
+    <string name="package_name">com.joeybidan.carematch</string>
+    <string name="custom_url_scheme">com.joeybidan.carematch</string>
+</resources>
