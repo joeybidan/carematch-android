@@ -2,7 +2,7 @@
 
 ## Status
 
-Priority 3 is in progress. The initial seven functional checks passed on one physical device. Broader device coverage and the signed release binary are not yet verified.
+Priority 3 is in progress. Eleven functional checks passed on one physical device across two rounds. Broader device coverage and the signed release binary are not yet verified.
 
 ## Evidence and scope
 
@@ -14,7 +14,7 @@ Priority 3 is in progress. The initial seven functional checks passed on one phy
 - Source context: v1.2 / versionCode 3 at commit 81b9c7c2e27dfa34adaeabefc9a8e19ef1ffd343. This is source context, not proof of binary identity.
 - These are user-reported physical-device results, not agent-executed emulator results.
 
-## Initial functional results
+## Reported functional results
 
 | Check | Result |
 | --- | --- |
@@ -25,20 +25,20 @@ Priority 3 is in progress. The initial seven functional checks passed on one phy
 | Online score submission | Pass |
 | Block and unblock | Pass |
 | Delete test data | Pass |
+| Support links and return to the app | Pass |
+| Disconnect during an online round and reconnect | Pass |
+| Back navigation, rotation, and larger text | Pass |
+| Longer gameplay | Pass |
 
-No issue was reported in these checks. Report submission/delivery was not one of the seven checked items. Earlier feedback confirmed the Terms checkbox and Privacy & Support interface appeared satisfactory.
+No issue was reported in these checks. Report submission/delivery was not one of the eleven checked items. The second round was reported at 23:01 on October 11, 2026 (Asia/Manila); exact session duration and device temperature were not measured. Earlier feedback confirmed the Terms checkbox and Privacy & Support interface appeared satisfactory.
 
 ## Remaining Android checks
 
-1. External handoff: open Email support without sending a message, confirm the destination address, return to the app; open Support & deletion webpage and return.
-2. Network interruption: start an online round while connected, disconnect, finish and save, then reconnect and tap Refresh. Confirm pending submission retries and no duplicate score is created. A round started offline remains local; it is not expected to become a global score.
-3. Display and navigation: test system Back in a policy dialog; rotate the phone; temporarily increase the system font size. Verify controls and text remain accessible, then restore settings.
-4. Sustained use: play for 15–20 minutes and repeat opening/closing panels. Record visible lag, freezes, crashes, or unusual heat. This is an observational check, not a measured performance benchmark.
-5. Report receipt: validate a controlled report against the tester's own test alias and confirm its receipt in the private moderation queue. Do not generate false reports against unrelated players.
-6. Deletion failure path: verify offline/server failure feedback preserves deletion authority and allows retry after reconnection, using disposable test data.
-7. Second Android device: repeat installation, launch, gameplay, policy access and online score submission on a different device/screen size, preferably an older or lower-powered phone when available.
-8. Signed release build: build the store-targeted signed Android release and repeat core checks. A debug APK pass alone does not validate the final release.
-9. Confirm installed app version, Android OS version, and final release artifact identity when collecting the release record.
+1. Report receipt: validate a controlled report against the tester's own test alias and confirm its receipt in the private moderation queue. Do not generate false reports against unrelated players.
+2. Deletion failure path: verify offline/server failure feedback preserves deletion authority and allows retry after reconnection, using disposable test data.
+3. Second Android device: repeat installation, launch, gameplay, policy access and online score submission on a different device/screen size, preferably an older or lower-powered phone when available.
+4. Signed release build: build the store-targeted signed Android release and repeat core checks. A debug APK pass alone does not validate the final release.
+5. Confirm installed app version, Android OS version, and final release artifact identity when collecting the release record.
 
 ## Execution environment
 
