@@ -2,7 +2,7 @@
 
 ## Status
 
-Priority 3 is in progress. Eleven functional checks passed on one physical device across two rounds. Broader device coverage and the signed release binary are not yet verified.
+Priority 3 is in progress. Thirteen checks were reported as passing on one physical device across three rounds. Twelve functional checks passed according to the tester; the report screen displayed success, but matching that phone's report to a persisted backend record remains pending. Broader device coverage and the signed release binary are not yet verified.
 
 ## Evidence and scope
 
@@ -29,16 +29,25 @@ Priority 3 is in progress. Eleven functional checks passed on one physical devic
 | Disconnect during an online round and reconnect | Pass |
 | Back navigation, rotation, and larger text | Pass |
 | Longer gameplay | Pass |
+| Offline deletion failure and successful connected retry | Pass |
+| Report submission | Success shown (tester reported); backend association pending |
 
-No issue was reported in these checks. Report submission/delivery was not one of the eleven checked items. The second round was reported at 23:01 on October 11, 2026 (Asia/Manila); exact session duration and device temperature were not measured. Earlier feedback confirmed the Terms checkbox and Privacy & Support interface appeared satisfactory.
+No issue was reported by the tester in these checks. The third round was reported at 23:19 on October 11, 2026 (Asia/Manila): offline deletion/retry passed, and reporting displayed “Report received.” The reported alias was not supplied. The second round was reported at 23:01 on October 11, 2026 (Asia/Manila); exact session duration and device temperature were not measured. Earlier feedback confirmed the Terms checkbox and Privacy & Support interface appeared satisfactory.
 
 ## Remaining Android checks
 
-1. Report receipt: validate a controlled report against the tester's own test alias and confirm its receipt in the private moderation queue. Do not generate false reports against unrelated players.
-2. Deletion failure path: verify offline/server failure feedback preserves deletion authority and allows retry after reconnection, using disposable test data.
-3. Second Android device: repeat installation, launch, gameplay, policy access and online score submission on a different device/screen size, preferably an older or lower-powered phone when available.
-4. Signed release build: build the store-targeted signed Android release and repeat core checks. A debug APK pass alone does not validate the final release.
-5. Confirm installed app version, Android OS version, and final release artifact identity when collecting the release record.
+1. Phone report association: identify the reported alias and whether game data was deleted after reporting. If necessary, repeat a controlled report against the tester's own alias and verify its receipt before deletion. Do not generate false reports against unrelated players.
+2. Second Android device: repeat installation, launch, gameplay, policy access and online score submission on a different device/screen size, preferably an older or lower-powered phone when available.
+3. Signed release build: build the store-targeted signed Android release and repeat core checks. A debug APK pass alone does not validate the final release.
+4. Confirm installed app version, Android OS version, and final release artifact identity when collecting the release record.
+
+## Additional live report verification
+
+At approximately 23:20 Asia/Manila, the private reports table contained zero rows, checked with the postgres role. No report could therefore be matched to the phone submission at that time. Deletion of game data also deletes reports made by that installation; whether deletion followed the phone report is not yet known.
+
+A separate isolated live API check at 23:21 used the agent's disposable test identity and alias QA20261011. The public report endpoint returned HTTP 200 with reported=true and report ID 3455e0be-6f5f-4754-8e9b-c48d605dc7e4. An SQL read independently confirmed that exact row in the private queue with status open. The public deletion endpoint for the same isolated test identity returned HTTP 200, deleted=true, reportsRemoved=1; a follow-up SQL read confirmed zero remaining rows for that report ID. The temporary test identity file was removed. No player data or unrelated report was altered.
+
+The deployed Edge Function includes the report RPC, and the live database report/cleanup functions were inspected. These checks validate the backend report-saving/deletion path independently; they do not establish receipt of the phone's particular report or imply an app defect.
 
 ## Execution environment
 
