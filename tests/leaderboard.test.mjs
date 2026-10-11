@@ -23,6 +23,7 @@ function fixture() {
   const rounds = new Map(), scores = new Map()
   let limited = false
   const rpc = async (name, args) => {
+    if (name === 'carematch_cleanup') return null
     if (name === 'carematch_rankings') return { weekly: [...scores.values()], allTime: [...scores.values()] }
     if (name === 'carematch_start_round') {
       if (limited) throw { code: 'P0001', message: 'carematch_rate_limit' }
@@ -40,7 +41,7 @@ function fixture() {
   const handle = createHandler({ rpc, publicKeys: ['public-test-key'], ipSecret: 'server-test-secret' })
   const request = (body, key = 'public-test-key') => handle(new Request('https://example.com/carematch-api', {
     method: body ? 'POST' : 'GET', headers: { apikey: key, 'Content-Type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(body ? { body: JSON.stringify(body.action === 'start' ? { deviceToken: 'a'.repeat(64), termsVersion: '2026-10-11', ...body } : body) } : {}),
   }))
   return { request, handle, scores, limit: () => { limited = true } }
 }

@@ -1,4 +1,5 @@
 import config from './online-config.json' with { type: 'json' }
+import { TERMS_VERSION } from './safety.mjs'
 
 export class LeaderboardError extends Error {
   constructor(message, status = 0) { super(message); this.status = status }
@@ -21,8 +22,10 @@ async function request(body, timeout = 8000) {
   }
 }
 
-export const fetchRankings = () => request()
-export const startRound = (alias) => request({ action: 'start', alias }, 4000)
+export const fetchRankings = (excluded = []) => request({ action: 'rankings', excluded })
+export const startRound = (alias, deviceToken) => request({ action: 'start', alias, deviceToken, termsVersion: TERMS_VERSION }, 4000)
+export const reportAlias = (alias, reason, deviceToken) => request({ action: 'report', alias, reason, deviceToken, termsVersion: TERMS_VERSION })
+export const deleteDeviceData = deviceToken => request({ action: 'delete', deviceToken, termsVersion: TERMS_VERSION })
 export const submitRound = (round) => request({ action: 'submit', ...round })
 
 export function createSubmissionQueue(storage, submit = submitRound) {
@@ -37,6 +40,7 @@ export function createSubmissionQueue(storage, submit = submitRound) {
   function write(rows) { try { storage.setItem(key, JSON.stringify(rows)) } catch { /* Storage is optional. */ } }
   return {
     count: () => read().length,
+    async settleAndClear() { if (running) await running; write([]) },
     add(round) {
       const rows = read()
       if (rows.some((row) => row.roundId === round.roundId)) return true

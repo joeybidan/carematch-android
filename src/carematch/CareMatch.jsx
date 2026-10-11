@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { newGame, applyAction, assignmentPoints, RULES_VERSION } from './engine.mjs'
 import { createSubmissionQueue, fetchRankings, startRound, submitRound } from './leaderboard.mjs'
 import './carematch.css'
+import SafetyPanel from './SafetyPanel.jsx'
+import { aliasError, normalizeAlias, TERMS_VERSION, isOffensiveAlias } from './safety.mjs'
+import { getDeviceToken, loadBlocks, hasAcceptedTerms, CONSENT_KEY, BLOCK_KEY } from './player.mjs'
 
 const NAME_KEY = 'carematch:name'
 const BOARD_KEY = 'carematch:local-top5'
 const CACHE_KEY = 'carematch:global-top5:v1'
-const queue = createSubmissionQueue({ getItem: read, setItem: write })
+const storage = { getItem: read, setItem: write, removeItem: key => { try { localStorage.removeItem(key) } catch { /* Optional local storage. */ } } }
+const queue = createSubmissionQueue(storage)
 const format = (value) => value.toLocaleString('en-US')
 
 function read(key) {
@@ -44,7 +48,7 @@ function loadRankings() {
   return null
 }
 
-function Ranking({ rows, label }) {
+function Ranking({ rows, label, safety }) {
   return (
     <ol className="cm-ranking" aria-label={label}>
       {Array.from({ length: 5 }, (_, i) => (
@@ -52,6 +56,7 @@ function Ranking({ rows, label }) {
           <span className="cm-rank">{String(i + 1).padStart(2, '0')}</span>
           <span className="cm-player">{rows[i]?.name || '—'}</span>
           <strong>{rows[i] ? format(rows[i].score) : '—'}</strong>
+          {rows[i] && safety && <div className="cm-row-safety"><button aria-label={`Report ${rows[i].name}`} onClick={() => safety.report(rows[i].name)}>Report</button><button aria-label={`Block ${rows[i].name}`} onClick={() => safety.block(rows[i].name)}>Block</button></div>}
         </li>
       ))}
     </ol>
@@ -85,8 +90,15 @@ export default function CareMatch() {
   const [boardStatus, setBoardStatus] = useState('Connecting…')
   const [loading, setLoading] = useState(false)
   const [pending, setPending] = useState(queue.count)
+  const [accepted, setAccepted] = useState(() => hasAcceptedTerms(storage))
+  const [blocked, setBlocked] = useState(() => loadBlocks(storage))
+  const blockedRef = useRef(blocked)
+  const [reportTarget, setReportTarget] = useState(null)
+  const [safetyBusy, setSafetyBusy] = useState(false)
+  const deletingRef = useRef(false)
 
   function refresh() {
+    if (deletingRef.current) return Promise.resolve()
     if (refreshing.current) return refreshing.current
     setLoading(true)
     refreshing.current = (async () => {
@@ -95,7 +107,7 @@ export default function CareMatch() {
       if (report.sent) setNotice('Saved online. Global rankings updated.')
       if (report.dropped) setNotice('An online submission expired or was rejected. Your local scores remain saved.')
       try {
-        const next = await fetchRankings()
+        const next = await fetchRankings(blockedRef.current)
         setRankings(next)
         write(CACHE_KEY, JSON.stringify(next))
         setBoardStatus('Connected · shared across devices')
@@ -124,28 +136,52 @@ export default function CareMatch() {
     selectedTile !== null && selectedMember !== null
       ? assignmentPoints(game, selectedMember, selectedTile)
       : null
-  const active = Boolean(state && !state.ended)
+  const active = Boolean(state && !state.ended && !safetyBusy)
 
-  async function start() {
-    if (startingRef.current || savingRef.current) return
-    const cleanName = name.trim().toUpperCase()
-    if (!/^[\p{L}\p{N} _.-]{1,12}$/u.test(cleanName)) {
-      setError('Enter an alias of up to 12 characters.')
+  function acceptRules(value) {
+    setAccepted(value); write(CONSENT_KEY, value ? TERMS_VERSION : '')
+  }
+  function changeBlock(alias, block) {
+    if (block && blockedRef.current.length >= 200 && !blockedRef.current.includes(alias)) { setError('Blocked list full. Unblock an alias before adding another.'); return }
+    const next = block ? [...new Set([...blockedRef.current, alias])].slice(0, 200) : blockedRef.current.filter(a => a !== alias)
+    write(BLOCK_KEY, JSON.stringify(next)); blockedRef.current = next; setBlocked(next)
+    setNotice(block ? `${alias} blocked on this device.` : `${alias} unblocked.`)
+    // Hide cached rows immediately; fetch fills the list with other eligible aliases.
+    const nextRankings = rankings ? { ...rankings, weekly: rankings.weekly.filter(r => !next.includes(r.name)), allTime: rankings.allTime.filter(r => !next.includes(r.name)) } : null
+    setRankings(nextRankings); write(CACHE_KEY, JSON.stringify(nextRankings))
+    if (refreshing.current) refreshing.current.then(() => refresh())
+    else refresh()
+  }
+  function afterDeletion() {
+    round.current = null; actions.current = []; localSaved.current = false
+    setState(null); setName(''); setBoard([]); setRankings(null); setPending(0); setSaved(false)
+    setAccepted(false); blockedRef.current = []; setBlocked([]); setReportTarget(null)
+    setNotice(''); setError(''); setSelectedMember(null); setSelectedTile(null)
+  }
+  async function start(online = true) {
+    if (startingRef.current || savingRef.current || deletingRef.current) return
+    const cleanName = normalizeAlias(name)
+    const validation = aliasError(cleanName)
+    if (validation) {
+      setError(validation)
       return
     }
 
+    if (online && !accepted) { setError('Accept the Terms & Player Rules, or choose Play offline.'); return }
     startingRef.current = true
     setStarting(true)
     setError('')
     round.current = null
     let seed = crypto.getRandomValues(new Uint32Array(1))[0]
     try {
-      const ticket = await startRound(cleanName)
+      if (!online) throw new Error('Local game requested')
+      const ticket = await startRound(cleanName, getDeviceToken(storage))
       if (ticket.version !== RULES_VERSION) throw new Error('Update needed')
       round.current = ticket
       seed = ticket.seed
       setRoundMode('Online round · eligible for global Top 5')
-    } catch {
+    } catch (error) {
+      if (online && error.status && error.status < 500 && error.status !== 429) { setError(error.message); return }
       setRoundMode('Offline round · local score only')
     } finally {
       startingRef.current = false
@@ -178,7 +214,7 @@ export default function CareMatch() {
   }
 
   async function saveScore() {
-    if (!state?.ended || savingRef.current || saved) return
+    if (!state?.ended || savingRef.current || saved || deletingRef.current) return
     savingRef.current = true
     setSaving(true)
     setError('')
@@ -254,7 +290,7 @@ export default function CareMatch() {
     >
       <header className="cm-header">
         <div>
-          <span className="cm-kicker">CAREGIVER MATCHING ARCADE</span>
+          <span className="cm-kicker">SHIFT ARCADE · JOEY BIDAN STUDIOS</span>
           <h1><span aria-hidden="true">♥</span> CARE<span>MATCH</span></h1>
         </div>
         <div className="cm-score">
@@ -283,12 +319,14 @@ export default function CareMatch() {
                 spellCheck="false"
                 placeholder="YOUR NAME"
                 onChange={(event) =>
-                  setName(event.target.value.toUpperCase().replace(/[^\p{L}\p{N} _.-]/gu, ''))
+                  setName(event.target.value.toUpperCase().replace(/[^A-Z0-9 _.-]/g, ''))
                 }
               />
-              <button className="cm-primary" disabled={starting} onClick={start}>{starting ? 'CONNECTING…' : 'PLAY'}</button>
+              <button className="cm-primary" disabled={starting || safetyBusy} onClick={() => start()}>{starting ? 'CONNECTING…' : 'PLAY'}</button>
             </div>
-            <p className="cm-phase-note">Play online for global rankings, or offline for local scores.</p>
+            <label className="cm-consent"><input type="checkbox" checked={accepted} onChange={e => acceptRules(e.target.checked)} />I accept the Terms &amp; Player Rules for online play. My alias and saved score will be public.</label>
+            <p className="cm-phase-note">Read Privacy Policy and Player Rules in Privacy &amp; Support below. Use a nickname.</p>
+            <button className="cm-link" disabled={starting || safetyBusy} onClick={() => start(false)}>Play offline · no upload</button>
           </div>
         )}
 
@@ -427,8 +465,8 @@ export default function CareMatch() {
           <div className="cm-results">
             <strong>SHIFT COMPLETE · {game.supported} HELPED</strong>
             <small>{game.reason} · {game.exact} exact matches</small>
-            <button className="cm-primary" disabled={saving || saved} onClick={saveScore}>{saving ? 'SAVING…' : saved ? 'SCORE SAVED' : 'SAVE SCORE'}</button>
-            <button className="cm-link" disabled={saving || starting} onClick={start}>{starting ? 'Connecting…' : 'Play again'}</button>
+            <button className="cm-primary" disabled={saving || saved || safetyBusy} onClick={saveScore}>{saving ? 'SAVING…' : saved ? 'SCORE SAVED' : 'SAVE SCORE'}</button>
+            <button className="cm-link" disabled={saving || starting || safetyBusy} onClick={() => start()}>{starting ? 'Connecting…' : 'Play again'}</button>
           </div>
         )}
 
@@ -468,8 +506,9 @@ export default function CareMatch() {
           {boardMode === 'local' ? 'Scores saved on this device only.' : boardStatus}
         </p>
         {pending > 0 && <p className="cm-board-status">{pending} online {pending === 1 ? 'score' : 'scores'} pending · <button className="cm-link" disabled={loading} onClick={refresh}>Retry sync</button></p>}
-        <Ranking rows={boardMode === 'local' ? board : rankings?.[boardMode] || []} label={`${boardMode === 'weekly' ? 'Weekly global' : boardMode === 'allTime' ? 'All-time global' : 'Local'} Top 5`} />
+        <Ranking safety={boardMode === 'local' ? null : { report: alias => { setReportTarget(alias); setTimeout(() => document.querySelector('.cm-safety')?.scrollIntoView({ behavior: 'smooth' }), 0) }, block: alias => changeBlock(alias, true) }} rows={(boardMode === 'local' ? board : rankings?.[boardMode] || []).filter(r => !blocked.includes(r.name) && !isOffensiveAlias(r.name))} label={`${boardMode === 'weekly' ? 'Weekly global' : boardMode === 'allTime' ? 'All-time global' : 'Local'} Top 5`} />
         {boardMode !== 'local' && <p className="cm-board-status">Best score per alias. Weeks start Monday, 12:00 AM Philippine time. Choose a distinctive alias; names aren't reserved.</p>}
+        <SafetyPanel storage={storage} blocked={blocked} onUnblock={alias => changeBlock(alias, false)} onDeleted={afterDeletion} busy={starting || saving || loading} onBusy={value => { deletingRef.current = value; setSafetyBusy(value) }} reportTarget={reportTarget} closeReport={() => setReportTarget(null)} accepted={accepted} acceptRules={acceptRules} settle={async () => { if (refreshing.current) await refreshing.current; await queue.settleAndClear(); setPending(0) }} />
       </div>
     </section>
   )

@@ -117,3 +117,17 @@ Rebuild using the Windows commands above, then copy the new `android/app/build/o
 
 1. Rebuild the version 1.1 APK and verify shared rankings on two physical devices.
 2. Build and test a signed release APK/AAB.
+
+## CareMatch: Shift Arcade v1.2 — privacy and player safety
+
+Priority 2 source and operational guidance live here permanently, independently of chat history. See [store-readiness and validation](docs/STORE-READINESS.md) and [daily moderation / deletion guide](docs/MODERATION.md).
+
+The updated app includes bundled offline-readable Privacy Policy and Player Rules, support/contact links, consent before online play, alias filtering, private reports, local alias blocks, and installation-authorized deletion. Android app identity remains `com.joeybidan.carematch`; versionCode is 3 and versionName is 1.2. A source update does **not** update an APK already installed on a phone.
+
+Public privacy URL: https://ctsdocutool.netlify.app/carematch/privacy.html
+
+Public support/deletion URL: https://ctsdocutool.netlify.app/carematch/support.html
+
+Run the existing Windows rebuild instructions above, then install the new APK over the existing installation. Old versions can still play offline, but new online rounds require the updated terms/device-key protocol. Pending v1.1 tickets can still submit within their existing 24-hour validity, subject to the current alias filter and moderation.
+
+The new SQL migration is an additive CareMatch-only snapshot applied through the SQL connection; do not run `supabase db push` blindly against the shared DocuTool project. Hourly cleanup was enabled with pg_cron. No frontend contains server credentials. `npm run sync:server` now copies both the engine and alias policy to the Edge Function. If either changes, run tests and redeploy the function with the matching sources before distributing an APK.

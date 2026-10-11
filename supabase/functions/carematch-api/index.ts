@@ -13,7 +13,8 @@ async function rpc(name: string, args: object) {
   const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
     method: 'POST', headers, body: JSON.stringify(args), signal: AbortSignal.timeout(8000),
   })
-  const data = await response.json()
+  const text = await response.text()
+  const data = text ? JSON.parse(text) : null
   if (!response.ok) throw data
   return data
 }
